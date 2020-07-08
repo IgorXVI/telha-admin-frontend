@@ -1,5 +1,4 @@
 import { fetchUtils } from 'react-admin'
-import { stringify } from 'query-string'
 
 const apiUrl = 'http://localhost:4000/graphql'
 const httpClient = fetchUtils.fetchJson
@@ -17,21 +16,42 @@ const getAttrs = resource => resource === "product" ?
         size
         quantity
         machineId
-    }` 
+    }`
     : `{
         id
         createdAt
         updatedAt
     }`
 
+const makeGraphqlParams = query => [
+    apiUrl,
+    {
+        method: 'POST',
+        body: JSON.stringify({
+            query
+        }),
+    }
+]
+
+const convertJSONToFilter = (json, keepNumbers = false) => `{${Object
+    .keys(json)
+    .map(key => `${key}: ${
+        keepNumbers === true && !isNaN(json[key]) ?
+            `${json[key]}`
+            : `"${json[key]}"`
+        }`)
+    .join(",\n")}}`
+
 export default {
     getList: (resource, params) => {
+        console.log("findMany")
+        
         const { page, perPage } = params.pagination
         const { field, order } = params.sort
 
         const sort = `{ ${field}: ${order.toUpperCase()} }`
 
-        const filter = JSON.stringify(params.filter).replace("\"", "")
+        const filter = convertJSONToFilter(params.filter)
 
         const funName = nameFun("findMany", resource)
 
@@ -47,86 +67,159 @@ export default {
             }
         }`
 
-        return httpClient(apiUrl, {
-            method: 'POST',
-            body: JSON.stringify({
-                query
-            }),
-        }).then(({ json }) => ({
+        return httpClient(...makeGraphqlParams(query)).then(({ json }) => ({
             data: json.data[funName].elements,
-            method: 'POST',
             total: json.data[funName].total
         }))
     },
 
-    getOne: (resource, params) =>
-        httpClient(`${apiUrl}/${resource}/${params.id}`).then(({ json }) => ({
-            data: json,
-        })),
+    getOne: (resource, params) => {
+        console.log("findOne")
 
-    getMany: (resource, params) => {
-        const query = {
-            filter: JSON.stringify({ id: params.ids }),
-        }
-        const url = `${apiUrl}/${resource}?${stringify(query)}`
-        return httpClient(url).then(({ json }) => ({ data: json }))
-    },
+        const funName = nameFun("findOne", resource)
 
-    getManyReference: (resource, params) => {
-        const { page, perPage } = params.pagination
-        const { field, order } = params.sort
-        const query = {
-            sort: JSON.stringify([field, order]),
-            range: JSON.stringify([(page - 1) * perPage, page * perPage - 1]),
-            filter: JSON.stringify({
-                ...params.filter,
-                [params.target]: params.id,
-            }),
-        }
-        const url = `${apiUrl}/${resource}?${stringify(query)}`
+        const query = `{
+            ${funName}(id: "${params.id}") ${getAttrs(resource)}
+        }`
 
-        return httpClient(url).then(({ headers, json }) => ({
-            data: json,
-            total: parseInt(headers.get('content-range').split('/').pop(), 10),
+        return httpClient(...makeGraphqlParams(query)).then(({ json }) => ({
+            data: json.data[funName],
         }))
     },
 
-    update: (resource, params) =>
-        httpClient(`${apiUrl}/${resource}/${params.id}`, {
-            method: 'PUT',
-            body: JSON.stringify(params.data),
-        }).then(({ json }) => ({ data: json })),
+    getMany: (resource, params) => {
+        console.log("findManyByIds")
 
-    updateMany: (resource, params) => {
-        const query = {
-            filter: JSON.stringify({ id: params.ids}),
-        }
-        return httpClient(`${apiUrl}/${resource}?${stringify(query)}`, {
-            method: 'PUT',
-            body: JSON.stringify(params.data),
-        }).then(({ json }) => ({ data: json }))
+        const funName = nameFun("findManyByIds", resource)
+        const ids = JSON.stringify(params.ids)
+
+        const query = `{
+            ${funName}(options: {
+                where: {
+                    ids: ${ids}
+                }
+            }) {
+                ${getAttrs(resource)}
+            }
+        }`
+
+        return httpClient(...makeGraphqlParams(query)).then(({ json }) => ({
+            data: json.data[funName],
+        }))
     },
 
-    create: (resource, params) =>
-        httpClient(`${apiUrl}/${resource}`, {
-            method: 'POST',
-            body: JSON.stringify(params.data),
-        }).then(({ json }) => ({
-            data: { ...params.data, id: json.id },
-        })),
+    getManyReference: (resource, params) => {
+        console.log("findMany reference")
 
-    delete: (resource, params) =>
-        httpClient(`${apiUrl}/${resource}/${params.id}`, {
-            method: 'DELETE',
-        }).then(({ json }) => ({ data: json })),
+        const { page, perPage } = params.pagination
+        const { field, order } = params.sort
+
+        const sort = `{ ${field}: ${order.toUpperCase()} }`
+
+        const filter = convertJSONToFilter({
+            ...params.filter,
+            [params.target]: params.id,
+        })
+
+        const funName = nameFun("findMany", resource)
+
+        const query = `{
+            ${funName}(options: {
+                order: ${sort},
+                where: ${filter},
+                take: ${perPage},
+                skip: ${(page - 1) * perPage}
+            }) {
+                total
+                elements ${getAttrs(resource)}
+            }
+        }`
+
+        return httpClient(...makeGraphqlParams(query)).then(({ json }) => ({
+            data: json.data[funName].elements,
+            total: json.data[funName].total
+        }))
+    },
+
+    update: (resource, params) => {
+        console.log("updateOne")
+
+        const funName = nameFun("updateOne", resource)
+
+        const body = convertJSONToFilter(params.data, true)
+
+        const query = `mutation {
+            ${funName}(
+                id: "${params.id}"
+                data: ${body}
+            ) ${getAttrs(resource)}
+        }`
+
+        return httpClient(...makeGraphqlParams(query)).then(({ json }) => ({ data: json[funName] }))
+    },
+
+    updateMany: (resource, params) => {
+        console.log("updateMany")
+
+        const funName = nameFun("updateMany", resource)
+        const ids = JSON.stringify(params.ids)
+
+        const body = convertJSONToFilter(params.data, true)
+
+        const query = `mutation {
+            ${funName}(
+                ids: "${ids}"
+                data: ${body}
+            ) ${getAttrs(resource)}
+        }`
+
+        return httpClient(...makeGraphqlParams(query)).then(({ json }) => ({ data: json[funName] }))
+    },
+
+    create: (resource, params) => {
+        console.log("create")
+
+        const funName = nameFun("create", resource)
+
+        const body = convertJSONToFilter(params.data, true)
+
+        const query = `mutation {
+            ${funName}(
+                data: ${body}
+            ) ${getAttrs(resource)}
+        }`
+
+        return httpClient(...makeGraphqlParams(query)).then(({ json }) => ({
+            data: json[funName],
+        }))
+    },
+
+    delete: (resource, params) => {
+        console.log("deleteOne")
+
+        const funName = nameFun("deleteOne", resource)
+
+        const query = `mutation {
+            ${funName}(
+                id: "${params.id}"
+            )
+        }`
+
+        return httpClient(...makeGraphqlParams(query)).then(({ json }) => ({ data: json[funName] }))
+    },
 
     deleteMany: (resource, params) => {
-        const query = {
-            filter: JSON.stringify({ id: params.ids}),
-        }
-        return httpClient(`${apiUrl}/${resource}?${stringify(query)}`, {
-            method: 'DELETE',
-            body: JSON.stringify(params.data),
-        }).then(({ json }) => ({ data: json }))
+        console.log("deleteMany")
+
+        const funName = nameFun("deleteMany", resource)
+        const ids = JSON.stringify(params.ids)
+
+        const query = `mutation {
+            ${funName}(
+                ids: ${ids}
+            )
+        }`
+
+        return httpClient(...makeGraphqlParams(query)).then(({ json }) => ({ data: json[funName] }))
     }
 }
