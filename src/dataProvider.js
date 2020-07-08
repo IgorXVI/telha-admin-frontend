@@ -34,7 +34,7 @@ const makeGraphqlParams = query => [
 ]
 
 const errorHandler = json => {
-    if(json.data === null){
+    if (json.data === null) {
         throw new Error(json.errors[0].message)
     }
 }
@@ -51,7 +51,7 @@ const convertJSONToFilter = (json, keepNumbers = false) => `{${Object
     .join(",\n")}}`
 
 export default {
-    getList: (resource, params) => {
+    getList: async (resource, params) => {
         console.log("findMany")
 
         const { page, perPage } = params.pagination
@@ -75,13 +75,15 @@ export default {
             }
         }`
 
-        return httpClient(...makeGraphqlParams(query)).then(({ json }) => ({
+        const { json } = await httpClient(...makeGraphqlParams(query))
+        errorHandler(json)
+        return {
             data: json.data[funName].elements,
             total: json.data[funName].total
-        }))
+        }
     },
 
-    getOne: (resource, params) => {
+    getOne: async (resource, params) => {
         console.log("findOne")
 
         const funName = nameFun("findOne", resource)
@@ -90,12 +92,14 @@ export default {
             ${funName}(id: "${params.id}") ${getAttrs(resource)}
         }`
 
-        return httpClient(...makeGraphqlParams(query)).then(({ json }) => ({
-            data: json.data[funName],
-        }))
+        const { json } = await httpClient(...makeGraphqlParams(query))
+        errorHandler(json)
+        return {
+            data: json.data[funName]
+        }
     },
 
-    getMany: (resource, params) => {
+    getMany: async (resource, params) => {
         console.log("findManyByIds")
 
         const funName = nameFun("findManyByIds", resource)
@@ -105,12 +109,14 @@ export default {
             ${funName}(ids: ${ids}) ${getAttrs(resource)}
         }`
 
-        return httpClient(...makeGraphqlParams(query)).then(({ json }) => ({
-            data: json.data[funName],
-        }))
+        const { json } = await httpClient(...makeGraphqlParams(query))
+        errorHandler(json)
+        return {
+            data: json.data[funName]
+        }
     },
 
-    getManyReference: (resource, params) => {
+    getManyReference: async (resource, params) => {
         console.log("findMany reference")
 
         const { page, perPage } = params.pagination
@@ -137,13 +143,15 @@ export default {
             }
         }`
 
-        return httpClient(...makeGraphqlParams(query)).then(({ json }) => ({
+        const { json } = await httpClient(...makeGraphqlParams(query))
+        errorHandler(json)
+        return {
             data: json.data[funName].elements,
             total: json.data[funName].total
-        }))
+        }
     },
 
-    update: (resource, params) => {
+    update: async (resource, params) => {
         console.log("updateOne")
 
         const funName = nameFun("updateOne", resource)
@@ -162,10 +170,14 @@ export default {
             ) ${getAttrs(resource)}
         }`
 
-        return httpClient(...makeGraphqlParams(query)).then(({ json }) => ({ data: json.data[funName] }))
+        const { json } = await httpClient(...makeGraphqlParams(query))
+        errorHandler(json)
+        return {
+            data: json.data[funName]
+        }
     },
 
-    updateMany: (resource, params) => {
+    updateMany: async (resource, params) => {
         console.log("updateMany")
 
         const funName = nameFun("updateMany", resource)
@@ -185,10 +197,14 @@ export default {
             ) ${getAttrs(resource)}
         }`
 
-        return httpClient(...makeGraphqlParams(query)).then(({ json }) => ({ data: json.data[funName] }))
+        const { json } = await httpClient(...makeGraphqlParams(query))
+        errorHandler(json)
+        return {
+            data: json.data[funName]
+        }
     },
 
-    create: (resource, params) => {
+    create: async (resource, params) => {
         console.log("create")
 
         const funName = nameFun("create", resource)
@@ -201,12 +217,14 @@ export default {
             ) ${getAttrs(resource)}
         }`
 
-        return httpClient(...makeGraphqlParams(query)).then(({ json }) => ({
-            data: json.data[funName],
-        }))
+        const { json } = await httpClient(...makeGraphqlParams(query))
+        errorHandler(json)
+        return {
+            data: json.data[funName]
+        }
     },
 
-    delete: (resource, params) => {
+    delete: async (resource, params) => {
         console.log("deleteOne")
 
         const funName = nameFun("deleteOne", resource)
@@ -217,7 +235,11 @@ export default {
             )
         }`
 
-        return httpClient(...makeGraphqlParams(query)).then(({ json }) => ({ data: json.data[funName] }))
+        const { json } = await httpClient(...makeGraphqlParams(query))
+        errorHandler(json)
+        return {
+            data: json.data[funName]
+        }
     },
 
     deleteMany: async (resource, params) => {
