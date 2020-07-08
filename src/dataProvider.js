@@ -148,6 +148,11 @@ export default {
 
         const funName = nameFun("updateOne", resource)
 
+        delete params.data.id
+        delete params.data.createdAt
+        delete params.data.updatedAt
+        delete params.data.machineId
+
         const body = convertJSONToFilter(params.data, true)
 
         const query = `mutation {
@@ -165,6 +170,11 @@ export default {
 
         const funName = nameFun("updateMany", resource)
         const ids = JSON.stringify(params.ids)
+
+        delete params.data.id
+        delete params.data.createdAt
+        delete params.data.updatedAt
+        delete params.data.machineId
 
         const body = convertJSONToFilter(params.data, true)
 
@@ -224,6 +234,8 @@ export default {
 
         const { json } = await httpClient(...makeGraphqlParams(query))
         errorHandler(json)
-        return json.data[funName]
+        return {
+            data: json.data[funName]
+        }
     }
 }
