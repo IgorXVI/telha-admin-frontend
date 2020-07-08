@@ -33,11 +33,19 @@ const makeGraphqlParams = query => [
     }
 ]
 
+const errorHandler = json => {
+    if(json.data === null){
+        throw new Error(json.errors[0].message)
+    }
+}
+
 const convertJSONToFilter = (json, keepNumbers = false) => `{${Object
     .keys(json)
     .map(key => `${key}: ${
         keepNumbers === true && !isNaN(json[key]) ?
-            `${json[key]}`
+            json[key] instanceof Date ?
+                `"${json[key].toISOString()}"`
+                : `${json[key]}`
             : `"${json[key]}"`
         }`)
     .join(",\n")}}`
@@ -45,7 +53,7 @@ const convertJSONToFilter = (json, keepNumbers = false) => `{${Object
 export default {
     getList: (resource, params) => {
         console.log("findMany")
-        
+
         const { page, perPage } = params.pagination
         const { field, order } = params.sort
 
@@ -94,13 +102,7 @@ export default {
         const ids = JSON.stringify(params.ids)
 
         const query = `{
-            ${funName}(options: {
-                where: {
-                    ids: ${ids}
-                }
-            }) {
-                ${getAttrs(resource)}
-            }
+            ${funName}(ids: ${ids}) ${getAttrs(resource)}
         }`
 
         return httpClient(...makeGraphqlParams(query)).then(({ json }) => ({
@@ -155,7 +157,7 @@ export default {
             ) ${getAttrs(resource)}
         }`
 
-        return httpClient(...makeGraphqlParams(query)).then(({ json }) => ({ data: json[funName] }))
+        return httpClient(...makeGraphqlParams(query)).then(({ json }) => ({ data: json.data[funName] }))
     },
 
     updateMany: (resource, params) => {
@@ -173,7 +175,7 @@ export default {
             ) ${getAttrs(resource)}
         }`
 
-        return httpClient(...makeGraphqlParams(query)).then(({ json }) => ({ data: json[funName] }))
+        return httpClient(...makeGraphqlParams(query)).then(({ json }) => ({ data: json.data[funName] }))
     },
 
     create: (resource, params) => {
@@ -190,7 +192,7 @@ export default {
         }`
 
         return httpClient(...makeGraphqlParams(query)).then(({ json }) => ({
-            data: json[funName],
+            data: json.data[funName],
         }))
     },
 
@@ -205,10 +207,10 @@ export default {
             )
         }`
 
-        return httpClient(...makeGraphqlParams(query)).then(({ json }) => ({ data: json[funName] }))
+        return httpClient(...makeGraphqlParams(query)).then(({ json }) => ({ data: json.data[funName] }))
     },
 
-    deleteMany: (resource, params) => {
+    deleteMany: async (resource, params) => {
         console.log("deleteMany")
 
         const funName = nameFun("deleteMany", resource)
@@ -220,6 +222,8 @@ export default {
             )
         }`
 
-        return httpClient(...makeGraphqlParams(query)).then(({ json }) => ({ data: json[funName] }))
+        const { json } = await httpClient(...makeGraphqlParams(query))
+        errorHandler(json)
+        return json.data[funName]
     }
 }
